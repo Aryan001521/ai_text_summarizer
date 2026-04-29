@@ -8,16 +8,24 @@ from pydantic import BaseModel
 
 router = APIRouter()
 
-# create tables
-Base.metadata.create_all(bind=engine)
-
 SECRET_KEY = "mysecretkey123"
 ALGORITHM = "HS256"
+
+_tables_created = False
 
 
 # ---------------- DB ----------------
 
+def init_db():
+    """Create database tables if they don't exist yet."""
+    global _tables_created
+    if not _tables_created:
+        Base.metadata.create_all(bind=engine)
+        _tables_created = True
+
+
 def get_db():
+    init_db()
     db = SessionLocal()
     try:
         yield db
