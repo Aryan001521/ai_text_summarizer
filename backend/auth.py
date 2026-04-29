@@ -12,11 +12,9 @@ router = APIRouter()
 SECRET_KEY = "mysecretkey123"
 ALGORITHM = "HS256"
 
-# password hashing (SAFE WAY)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # ---------------- DB INIT ----------------
-
 _tables_created = False
 
 def init_db():
@@ -34,7 +32,6 @@ def get_db():
         db.close()
 
 # ---------------- SCHEMAS ----------------
-
 class LoginRequest(BaseModel):
     email: str
     password: str
@@ -45,15 +42,12 @@ class SignupRequest(BaseModel):
     password: str
 
 # ---------------- JWT ----------------
-
 def create_token(data: dict):
     payload = data.copy()
     payload["exp"] = datetime.utcnow() + timedelta(hours=2)
-
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 # ---------------- SIGNUP ----------------
-
 @router.post("/signup")
 def signup(data: SignupRequest, db: Session = Depends(get_db)):
 
@@ -77,7 +71,6 @@ def signup(data: SignupRequest, db: Session = Depends(get_db)):
     return {"message": "User created successfully"}
 
 # ---------------- LOGIN ----------------
-
 @router.post("/login")
 def login(data: LoginRequest, db: Session = Depends(get_db)):
 
@@ -97,7 +90,6 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     }
 
 # ---------------- AUTH ----------------
-
 def get_current_user(authorization: str = Header(None)):
 
     if not authorization:
