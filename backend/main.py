@@ -1,14 +1,18 @@
 from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from transformers import pipeline
-from auth import router as auth_router, get_current_user, init_db
+from auth import router as auth_router, get_current_user
 import PyPDF2
 import io
-import os
 
 app = FastAPI()
 
-# ---------------- CORS ----------------
+# Auth router
+app.include_router(auth_router)
+
+# CORS fix
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,40 +21,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------------- AUTH ----------------
-app.include_router(auth_router)
-
-# ---------------- GLOBAL MODEL (lazy load) ----------------
-summarizer = None
+# static folder
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
-# ---------------- STARTUP SAFE ----------------
-@app.on_event("startup")
-def startup():
-    global summarizer
-
-    # DB safe init
-    try:
-        init_db()
-        print("DB initialized")
-    except Exception as e:
-        print("DB init failed (non-blocking):", e)
-
-    # Model load (still risky but controlled)
-    try:
-        summarizer = pipeline(
-            "summarization",
-            model="sshleifer/distilbart-cnn-12-6"  # lightweight model
-        )
-        print("Model loaded")
-    except Exception as e:
-        print("Model load failed:", e)
+@app.get("/favicon.ico")
+def favicon():
+    return FileResponse("static/favicon.ico")
 
 
-# ---------------- HOME ----------------
-@app.get("/")
-def home():
-    return {"message": "AI Text Summarizer API Running 🚀"}
+# ✅ KEEP YOUR ORIGINAL MODEL (NO CHANGE REQUESTED)
+summarizer = pipeline(
+    "text-generation",
+    model="google/flan-t5-base"
+)
 
 
 # ---------------- KEYWORDS ----------------
@@ -58,17 +42,28 @@ def extract_keywords(text):
     words = text.split()
     words = [w.strip(".,!?").lower() for w in words]
 
-    stop_words = {"the", "is", "and", "a", "an", "of", "to", "in", "for", "on", "with"}
+    stop_words = [
+        "the", "is", "and", "a", "an", "of", "to",
+        "in", "for", "on", "with"
+    ]
 
     keywords = []
+
     for w in words:
-        if w not in stop_words and len(w) > 4 and w not in keywords:
-            keywords.append(w)
+        if w not in stop_words and len(w) > 4:
+            if w not in keywords:
+                keywords.append(w)
 
     return keywords[:10]
 
 
-# ---------------- SUMMARIZE ----------------
+# ---------------- HOME ----------------
+@app.get("/")
+def home():
+    return {"message": "AI Text Summarizer API Running"}
+
+
+# ---------------- SUMMARIZE (FIXED) ----------------
 @app.post("/summarize")
 async def summarize(
     text: str = Form(None),
@@ -76,14 +71,13 @@ async def summarize(
     user: dict = Depends(get_current_user)
 ):
 
-    if summarizer is None:
-        raise HTTPException(status_code=503, detail="Model not loaded yet")
-
     content = ""
 
+    # TEXT INPUT
     if text:
         content = text
 
+    # PDF INPUT
     elif file:
         pdf_bytes = await file.read()
         pdf_reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
@@ -93,25 +87,34 @@ async def summarize(
             if page_text:
                 content += page_text
 
+    # NO INPUT ERROR FIX
     if not content.strip():
-        raise HTTPException(status_code=400, detail="Please provide text or PDF")
+        raise HTTPException(
+            status_code=400,
+            detail="Please provide text or PDF file"
+        )
 
-    content = content[:1500]  # memory safe
+    # limit input size
+    content = content[:2000]
+
+    # prompt (safe for your model)
+    prompt = "summarize: " + content
 
     try:
-        result = summarizer(
-            content,
-            max_length=150,
-            min_length=40,
-            do_sample=False
-        )
-        summary = result[0]["summary_text"]
+        result = summarizer(prompt, max_length=200, do_sample=False)
+
+        summary = result[0]["generated_text"]
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail=f"Summarization failed: {str(e)}"
+        )
+
+    keywords = extract_keywords(content)
 
     return {
         "summary": summary,
-        "keywords": extract_keywords(content),
+        "keywords": keywords,
         "user": user
     }
