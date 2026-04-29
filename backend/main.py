@@ -1,7 +1,5 @@
 from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 from transformers import pipeline
 from auth import router as auth_router, get_current_user
 import PyPDF2
@@ -22,14 +20,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# ---------------- STATIC ----------------
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-
-@app.get("/favicon.ico")
-def favicon():
-    return FileResponse("static/favicon.ico")
 
 
 # ---------------- MODEL (FIXED) ----------------
