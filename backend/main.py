@@ -1,18 +1,13 @@
-from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 from transformers import pipeline
-from auth import router as auth_router, get_current_user
 import PyPDF2
 import io
 
 app = FastAPI()
 
-# Auth router
-app.include_router(auth_router)
-
-# CORS fix
+# ---------------- CORS ----------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,19 +16,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# static folder
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# ---------------- SAFE STATIC HANDLING ----------------
+# (Railway crash avoid: folder check)
+import os
+if os.path.exists("static"):
+    app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
-@app.get("/favicon.ico")
-def favicon():
-    return FileResponse("static/favicon.ico")
-
-
-# ✅ KEEP YOUR ORIGINAL MODEL (NO CHANGE REQUESTED)
+# ---------------- MODEL (LIGHTER SAFE OPTION) ----------------
+# NOTE: Railway 1GB RAM limit → heavy models crash
 summarizer = pipeline(
     "text-generation",
-    model="google/flan-t5-base"
+    model="distilgpt2"
 )
 
 
@@ -48,7 +42,6 @@ def extract_keywords(text):
     ]
 
     keywords = []
-
     for w in words:
         if w not in stop_words and len(w) > 4:
             if w not in keywords:
@@ -60,15 +53,14 @@ def extract_keywords(text):
 # ---------------- HOME ----------------
 @app.get("/")
 def home():
-    return {"message": "AI Text Summarizer API Running"}
+    return {"message": "AI Text Summarizer API Running 🚀"}
 
 
-# ---------------- SUMMARIZE (FIXED) ----------------
+# ---------------- SUMMARIZE ----------------
 @app.post("/summarize")
 async def summarize(
     text: str = Form(None),
-    file: UploadFile = File(None),
-    user: dict = Depends(get_current_user)
+    file: UploadFile = File(None)
 ):
 
     content = ""
@@ -87,22 +79,21 @@ async def summarize(
             if page_text:
                 content += page_text
 
-    # NO INPUT ERROR FIX
+    # ERROR HANDLING
     if not content.strip():
         raise HTTPException(
             status_code=400,
             detail="Please provide text or PDF file"
         )
 
-    # limit input size
-    content = content[:2000]
+    # LIMIT (important for Railway memory)
+    content = content[:1000]
 
-    # prompt (safe for your model)
+    # SAFE PROMPT
     prompt = "summarize: " + content
 
     try:
-        result = summarizer(prompt, max_length=200, do_sample=False)
-
+        result = summarizer(prompt, max_length=100, do_sample=False)
         summary = result[0]["generated_text"]
 
     except Exception as e:
@@ -115,6 +106,5 @@ async def summarize(
 
     return {
         "summary": summary,
-        "keywords": keywords,
-        "user": user
+        "keywords": keywords
     }
