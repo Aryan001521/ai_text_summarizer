@@ -4,3 +4,4 @@ python-multipart
 pymupdf
 transformers
 torch==2.2.0 --index-url https://download.pytorch.org/whl/cpu
+sqlalchemy==2.0.36
