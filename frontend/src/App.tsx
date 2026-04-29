@@ -1,204 +1,130 @@
-import { useState } from "react";
-import axios from "axios";
-import jsPDF from "jspdf";
-import {
-  BrowserRouter as Router,
-  Routes,
-  Route,
-  Link,
-} from "react-router-dom";
+from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException, Header
+from fastapi.middleware.cors import CORSMiddleware
+from transformers import pipeline
+from jose import jwt
+from datetime import datetime, timedelta
+from pydantic import BaseModel
+import PyPDF2
+import io
 
-import AdminDashboard from "./Pages/AdminDashboard";
-import "./App.css";
+# ---------------- APP ----------------
+app = FastAPI()
 
-const API = "https://aitextsummarizer-production.up.railway.app";
+# ---------------- CORS FIX (IMPORTANT) ----------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "https://ai-text-summarizer-pi-ten.vercel.app"
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-function MainApp() {
-  const [token, setToken] = useState<string | null>(
-    localStorage.getItem("token")
-  );
+# ---------------- MODEL ----------------
+summarizer = pipeline("text-generation", model="distilgpt2")
 
-  const [savedEmail] = useState<string | null>(
-    localStorage.getItem("email")
-  );
+# ---------------- JWT ----------------
+SECRET_KEY = "mysecretkey123"
+ALGORITHM = "HS256"
 
-  const [isSignup, setIsSignup] = useState(false);
+# ---------------- SCHEMAS ----------------
+class LoginRequest(BaseModel):
+    email: str
+    password: str
 
-  const [username, setUsername] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+class SignupRequest(BaseModel):
+    username: str
+    email: str
+    password: str
 
-  const [text, setText] = useState("");
-  const [file, setFile] = useState<File | null>(null);
+# ---------------- SIMPLE FAKE DB (for now) ----------------
+users_db = {}
 
-  const [summary, setSummary] = useState("");
-  const [keywords, setKeywords] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
+# ---------------- AUTH ----------------
+def create_token(data: dict):
+    payload = data.copy()
+    payload.update({"exp": datetime.utcnow() + timedelta(hours=2)})
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.length) {
-      setFile(e.target.files[0]);
-    }
-  };
+# ---------------- SIGNUP ----------------
+@app.post("/signup")
+def signup(data: SignupRequest):
+    if data.email in users_db:
+        raise HTTPException(status_code=400, detail="User already exists")
 
-  // ---------------- LOGIN ----------------
-  const handleLogin = async () => {
-    try {
-      const res = await axios.post(`${API}/login`, {
-        email,
-        password,
-      });
-
-      localStorage.setItem("token", res.data.access_token);
-      localStorage.setItem("email", email);
-
-      setToken(res.data.access_token);
-    } catch (err) {
-      console.log(err);
-      alert("Login failed");
-    }
-  };
-
-  // ---------------- SIGNUP ----------------
-  const handleSignup = async () => {
-    try {
-      await axios.post(`${API}/signup`, {
-        username,
-        email,
-        password,
-      });
-
-      alert("Signup successful");
-      setIsSignup(false);
-    } catch (err) {
-      console.log(err);
-      alert("Signup failed");
-    }
-  };
-
-  // ---------------- LOGOUT ----------------
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("email");
-    setToken(null);
-  };
-
-  // ---------------- SUMMARIZE ----------------
-  const handleSummarize = async () => {
-    if (!text && !file) return alert("Enter text or upload PDF");
-
-    setLoading(true);
-
-    try {
-      const formData = new FormData();
-
-      if (text) formData.append("text", text);
-      if (file) formData.append("file", file);
-
-      const res = await axios.post(`${API}/summarize`, formData, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      setSummary(res.data.summary);
-      setKeywords(res.data.keywords);
-    } catch (err) {
-      console.log(err);
-      alert("Error while summarizing");
+    users_db[data.email] = {
+        "username": data.username,
+        "password": data.password
     }
 
-    setLoading(false);
-  };
+    return {"message": "Signup successful"}
 
-  const downloadPDF = () => {
-    const doc = new jsPDF();
+# ---------------- LOGIN ----------------
+@app.post("/login")
+def login(data: LoginRequest):
+    user = users_db.get(data.email)
 
-    doc.text("AI Summary", 20, 20);
-    doc.text(summary, 20, 40);
+    if not user or user["password"] != data.password:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    doc.text("Keywords:", 20, 100);
-    doc.text(keywords.join(", "), 20, 110);
+    token = create_token({"email": data.email})
 
-    doc.save("summary.pdf");
-  };
+    return {
+        "access_token": token,
+        "token_type": "bearer"
+    }
 
-  // ---------------- LOGIN PAGE ----------------
-  if (!token) {
-    return (
-      <div className="app">
-        <h1>{isSignup ? "Signup" : "Login"}</h1>
+# ---------------- AUTH CHECK ----------------
+def get_current_user(authorization: str = Header(None)):
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Token missing")
 
-        {isSignup && (
-          <input
-            placeholder="Username"
-            onChange={(e) => setUsername(e.target.value)}
-          />
-        )}
+    token = authorization.replace("Bearer ", "")
 
-        <input
-          placeholder="Email"
-          onChange={(e) => setEmail(e.target.value)}
-        />
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload
+    except:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
-        <input
-          type="password"
-          placeholder="Password"
-          onChange={(e) => setPassword(e.target.value)}
-        />
+# ---------------- HOME ----------------
+@app.get("/")
+def home():
+    return {"message": "AI Text Summarizer API Running 🚀"}
 
-        <button onClick={isSignup ? handleSignup : handleLogin}>
-          {isSignup ? "Signup" : "Login"}
-        </button>
+# ---------------- SUMMARIZE ----------------
+@app.post("/summarize")
+async def summarize(
+    text: str = Form(None),
+    file: UploadFile = File(None),
+    user: dict = Depends(get_current_user)
+):
 
-        <p onClick={() => setIsSignup(!isSignup)}>
-          {isSignup ? "Go to Login" : "Go to Signup"}
-        </p>
-      </div>
-    );
-  }
+    content = ""
 
-  // ---------------- MAIN APP ----------------
-  return (
-    <div className="app">
-      <h1>AI Text Summarizer</h1>
+    if text:
+        content = text
 
-      <button onClick={handleLogout}>Logout</button>
+    elif file:
+        pdf = await file.read()
+        reader = PyPDF2.PdfReader(io.BytesIO(pdf))
 
-      <textarea
-        placeholder="Enter text"
-        onChange={(e) => setText(e.target.value)}
-      />
+        for page in reader.pages:
+            t = page.extract_text()
+            if t:
+                content += t
 
-      <input type="file" onChange={handleFileChange} />
+    if not content.strip():
+        raise HTTPException(status_code=400, detail="No input provided")
 
-      <button onClick={handleSummarize}>
-        {loading ? "Loading..." : "Summarize"}
-      </button>
+    content = content[:1000]
 
-      {summary && (
-        <div>
-          <h3>Summary</h3>
-          <p>{summary}</p>
+    result = summarizer("summarize: " + content, max_length=120, do_sample=False)
 
-          <h3>Keywords</h3>
-          <p>{keywords.join(", ")}</p>
-
-          <button onClick={downloadPDF}>Download PDF</button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------- ROUTER ----------------
-export default function App() {
-  return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<MainApp />} />
-        <Route path="/admin" element={<AdminDashboard />} />
-      </Routes>
-    </Router>
-  );
-}
+    return {
+        "summary": result[0]["generated_text"],
+        "keywords": content.split()[:10]
+    }
