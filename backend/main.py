@@ -6,13 +6,15 @@ from transformers import pipeline
 from auth import router as auth_router, get_current_user
 import PyPDF2
 import io
+import os
+import uvicorn
 
 app = FastAPI()
 
-# Auth router
+# ---------------- AUTH ----------------
 app.include_router(auth_router)
 
-# CORS fix
+# ---------------- CORS ----------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,7 +23,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# static folder
+# ---------------- STATIC ----------------
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
@@ -30,9 +32,9 @@ def favicon():
     return FileResponse("static/favicon.ico")
 
 
-# ✅ KEEP YOUR ORIGINAL MODEL (NO CHANGE REQUESTED)
+# ---------------- MODEL (FIXED) ----------------
 summarizer = pipeline(
-    "text-generation",
+    "summarization",
     model="google/flan-t5-base"
 )
 
@@ -42,17 +44,12 @@ def extract_keywords(text):
     words = text.split()
     words = [w.strip(".,!?").lower() for w in words]
 
-    stop_words = [
-        "the", "is", "and", "a", "an", "of", "to",
-        "in", "for", "on", "with"
-    ]
+    stop_words = {"the", "is", "and", "a", "an", "of", "to", "in", "for", "on", "with"}
 
     keywords = []
-
     for w in words:
-        if w not in stop_words and len(w) > 4:
-            if w not in keywords:
-                keywords.append(w)
+        if w not in stop_words and len(w) > 4 and w not in keywords:
+            keywords.append(w)
 
     return keywords[:10]
 
@@ -60,10 +57,10 @@ def extract_keywords(text):
 # ---------------- HOME ----------------
 @app.get("/")
 def home():
-    return {"message": "AI Text Summarizer API Running"}
+    return {"message": "AI Text Summarizer API Running 🚀"}
 
 
-# ---------------- SUMMARIZE (FIXED) ----------------
+# ---------------- SUMMARIZE ----------------
 @app.post("/summarize")
 async def summarize(
     text: str = Form(None),
@@ -73,11 +70,9 @@ async def summarize(
 
     content = ""
 
-    # TEXT INPUT
     if text:
         content = text
 
-    # PDF INPUT
     elif file:
         pdf_bytes = await file.read()
         pdf_reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
@@ -87,34 +82,26 @@ async def summarize(
             if page_text:
                 content += page_text
 
-    # NO INPUT ERROR FIX
     if not content.strip():
-        raise HTTPException(
-            status_code=400,
-            detail="Please provide text or PDF file"
-        )
+        raise HTTPException(status_code=400, detail="Please provide text or PDF")
 
-    # limit input size
     content = content[:2000]
 
-    # prompt (safe for your model)
-    prompt = "summarize: " + content
-
     try:
-        result = summarizer(prompt, max_length=200, do_sample=False)
-
-        summary = result[0]["generated_text"]
+        result = summarizer(content, max_length=200, min_length=50, do_sample=False)
+        summary = result[0]["summary_text"]
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Summarization failed: {str(e)}"
-        )
-
-    keywords = extract_keywords(content)
+        raise HTTPException(status_code=500, detail=str(e))
 
     return {
         "summary": summary,
-        "keywords": keywords,
+        "keywords": extract_keywords(content),
         "user": user
     }
+
+
+# ---------------- RENDER ENTRY POINT ----------------
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
