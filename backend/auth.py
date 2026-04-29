@@ -5,12 +5,15 @@ from models import User, Base
 from datetime import datetime, timedelta
 from pydantic import BaseModel
 from jose import jwt
-from passlib.hash import bcrypt
+from passlib.context import CryptContext
 
 router = APIRouter()
 
 SECRET_KEY = "mysecretkey123"
 ALGORITHM = "HS256"
+
+# password hashing (SAFE WAY)
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # ---------------- DB INIT ----------------
 
@@ -59,7 +62,7 @@ def signup(data: SignupRequest, db: Session = Depends(get_db)):
     if user_exists:
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    hashed_password = bcrypt.hash(data.password)
+    hashed_password = pwd_context.hash(data.password)
 
     new_user = User(
         username=data.username,
@@ -83,7 +86,7 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    if not bcrypt.verify(data.password, user.password):
+    if not pwd_context.verify(data.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     token = create_token({"email": user.email})
