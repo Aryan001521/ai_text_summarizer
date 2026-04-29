@@ -11,9 +11,7 @@ import {
 import AdminDashboard from "./Pages/AdminDashboard";
 import "./App.css";
 
-// 🔥 CHANGE THIS AFTER DEPLOYMENT
-const API_BASE_URL =
-  "https://ai-text-summarizer-production.up.railway.app";
+const API = "https://aitextsummarizer-production.up.railway.app";
 
 function MainApp() {
   const [token, setToken] = useState<string | null>(
@@ -38,7 +36,7 @@ function MainApp() {
   const [loading, setLoading] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
+    if (e.target.files?.length) {
       setFile(e.target.files[0]);
     }
   };
@@ -46,7 +44,7 @@ function MainApp() {
   // ---------------- LOGIN ----------------
   const handleLogin = async () => {
     try {
-      const res = await axios.post(`${API_BASE_URL}/login`, {
+      const res = await axios.post(`${API}/login`, {
         email,
         password,
       });
@@ -57,20 +55,20 @@ function MainApp() {
       setToken(res.data.access_token);
     } catch (err) {
       console.log(err);
-      alert("Login failed (check backend URL or user)");
+      alert("Login failed");
     }
   };
 
   // ---------------- SIGNUP ----------------
   const handleSignup = async () => {
     try {
-      await axios.post(`${API_BASE_URL}/signup`, {
+      await axios.post(`${API}/signup`, {
         username,
         email,
         password,
       });
 
-      alert("Signup successful! Now login.");
+      alert("Signup successful");
       setIsSignup(false);
     } catch (err) {
       console.log(err);
@@ -87,10 +85,7 @@ function MainApp() {
 
   // ---------------- SUMMARIZE ----------------
   const handleSummarize = async () => {
-    if (!text && !file) {
-      alert("Please enter text or upload PDF");
-      return;
-    }
+    if (!text && !file) return alert("Enter text or upload PDF");
 
     setLoading(true);
 
@@ -100,35 +95,30 @@ function MainApp() {
       if (text) formData.append("text", text);
       if (file) formData.append("file", file);
 
-      const res = await axios.post(
-        `${API_BASE_URL}/summarize`,
-        formData,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      const res = await axios.post(`${API}/summarize`, formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
       setSummary(res.data.summary);
       setKeywords(res.data.keywords);
     } catch (err) {
       console.log(err);
-      alert("Summarization failed");
+      alert("Error while summarizing");
     }
 
     setLoading(false);
   };
 
-  // ---------------- PDF DOWNLOAD ----------------
   const downloadPDF = () => {
     const doc = new jsPDF();
 
-    doc.text("AI Summary", 10, 10);
-    doc.text(summary, 10, 20);
+    doc.text("AI Summary", 20, 20);
+    doc.text(summary, 20, 40);
 
-    doc.text("Keywords:", 10, 60);
-    doc.text(keywords.join(", "), 10, 70);
+    doc.text("Keywords:", 20, 100);
+    doc.text(keywords.join(", "), 20, 110);
 
     doc.save("summary.pdf");
   };
@@ -162,7 +152,7 @@ function MainApp() {
         </button>
 
         <p onClick={() => setIsSignup(!isSignup)}>
-          {isSignup ? "Already have account? Login" : "Create new account"}
+          {isSignup ? "Go to Login" : "Go to Signup"}
         </p>
       </div>
     );
@@ -175,19 +165,12 @@ function MainApp() {
 
       <button onClick={handleLogout}>Logout</button>
 
-      {savedEmail === "admin@gmail.com" && (
-        <Link to="/admin">
-          <button>Admin Dashboard</button>
-        </Link>
-      )}
-
       <textarea
         placeholder="Enter text"
-        value={text}
         onChange={(e) => setText(e.target.value)}
       />
 
-      <input type="file" accept="application/pdf" onChange={handleFileChange} />
+      <input type="file" onChange={handleFileChange} />
 
       <button onClick={handleSummarize}>
         {loading ? "Loading..." : "Summarize"}
@@ -208,7 +191,8 @@ function MainApp() {
   );
 }
 
-function App() {
+// ---------------- ROUTER ----------------
+export default function App() {
   return (
     <Router>
       <Routes>
@@ -218,5 +202,3 @@ function App() {
     </Router>
   );
 }
-
-export default App;
