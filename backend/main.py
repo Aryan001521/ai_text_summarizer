@@ -5,19 +5,8 @@ from auth import router as auth_router, get_current_user, init_db
 import PyPDF2
 import io
 import os
-import uvicorn
 
 app = FastAPI()
-
-
-# ---------------- STARTUP ----------------
-@app.on_event("startup")
-def on_startup():
-    init_db()
-
-
-# ---------------- AUTH ----------------
-app.include_router(auth_router)
 
 # ---------------- CORS ----------------
 app.add_middleware(
@@ -28,12 +17,40 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ---------------- AUTH ----------------
+app.include_router(auth_router)
 
-# ---------------- MODEL (FIXED) ----------------
-summarizer = pipeline(
-    "summarization",
-    model="google/flan-t5-base"
-)
+# ---------------- GLOBAL MODEL (lazy load) ----------------
+summarizer = None
+
+
+# ---------------- STARTUP SAFE ----------------
+@app.on_event("startup")
+def startup():
+    global summarizer
+
+    # DB safe init
+    try:
+        init_db()
+        print("DB initialized")
+    except Exception as e:
+        print("DB init failed (non-blocking):", e)
+
+    # Model load (still risky but controlled)
+    try:
+        summarizer = pipeline(
+            "summarization",
+            model="sshleifer/distilbart-cnn-12-6"  # lightweight model
+        )
+        print("Model loaded")
+    except Exception as e:
+        print("Model load failed:", e)
+
+
+# ---------------- HOME ----------------
+@app.get("/")
+def home():
+    return {"message": "AI Text Summarizer API Running 🚀"}
 
 
 # ---------------- KEYWORDS ----------------
@@ -51,12 +68,6 @@ def extract_keywords(text):
     return keywords[:10]
 
 
-# ---------------- HOME ----------------
-@app.get("/")
-def home():
-    return {"message": "AI Text Summarizer API Running 🚀"}
-
-
 # ---------------- SUMMARIZE ----------------
 @app.post("/summarize")
 async def summarize(
@@ -64,6 +75,9 @@ async def summarize(
     file: UploadFile = File(None),
     user: dict = Depends(get_current_user)
 ):
+
+    if summarizer is None:
+        raise HTTPException(status_code=503, detail="Model not loaded yet")
 
     content = ""
 
@@ -82,10 +96,15 @@ async def summarize(
     if not content.strip():
         raise HTTPException(status_code=400, detail="Please provide text or PDF")
 
-    content = content[:2000]
+    content = content[:1500]  # memory safe
 
     try:
-        result = summarizer(content, max_length=200, min_length=50, do_sample=False)
+        result = summarizer(
+            content,
+            max_length=150,
+            min_length=40,
+            do_sample=False
+        )
         summary = result[0]["summary_text"]
 
     except Exception as e:
@@ -96,9 +115,3 @@ async def summarize(
         "keywords": extract_keywords(content),
         "user": user
     }
-
-
-# ---------------- RENDER ENTRY POINT ----------------
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
