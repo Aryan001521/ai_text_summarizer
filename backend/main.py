@@ -1,33 +1,32 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-
 from transformers import pipeline
+from auth import router as auth_router, get_current_user
 import PyPDF2
 import io
 import os
 
-from auth import router as auth_router, get_current_user
-
 app = FastAPI()
+
+# 🔥 DEBUG CHECK
+print("MAIN APP LOADED 🚀")
+print("AUTH ROUTER LOADED 🚀")
+
+# ---------------- AUTH ROUTES ----------------
+app.include_router(auth_router, prefix="/auth")
 
 # ---------------- CORS ----------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
-        "http://127.0.0.1:5173",
         "https://ai-text-summarizer-pi-ten.vercel.app"
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# ---------------- AUTH ROUTES ----------------
-app.include_router(auth_router, prefix="/auth")
-
-print("AUTH ROUTER LOADED ✅")
 
 # ---------------- STATIC ----------------
 if os.path.exists("static"):
@@ -36,30 +35,31 @@ if os.path.exists("static"):
 # ---------------- MODEL ----------------
 summarizer = pipeline("text-generation", model="distilgpt2")
 
-# ---------------- HOME ----------------
-@app.get("/")
-def home():
-    return {"message": "AI Text Summarizer API Running 🚀"}
-
 # ---------------- KEYWORDS ----------------
 def extract_keywords(text):
     words = text.split()
-    stop_words = {"the","is","and","a","an","of","to","in","for","on","with"}
+    words = [w.strip(".,!?").lower() for w in words]
+
+    stop_words = ["the","is","and","a","an","of","to","in","for","on","with"]
 
     keywords = []
     for w in words:
-        w = w.strip(".,!?").lower()
         if w not in stop_words and len(w) > 4:
             if w not in keywords:
                 keywords.append(w)
 
     return keywords[:10]
 
+# ---------------- HOME ----------------
+@app.get("/")
+def home():
+    return {"message": "AI Text Summarizer API Running 🚀"}
+
 # ---------------- SUMMARIZE ----------------
 @app.post("/summarize")
 async def summarize(
-    text: str = None,
-    file: PyPDF2.types.UploadFile = None,
+    text: str = Form(None),
+    file: UploadFile = File(None),
     user: dict = Depends(get_current_user)
 ):
 
@@ -73,19 +73,16 @@ async def summarize(
         pdf_reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
 
         for page in pdf_reader.pages:
-            if page.extract_text():
-                content += page.extract_text()
+            page_text = page.extract_text()
+            if page_text:
+                content += page_text
 
     if not content.strip():
-        return {"error": "No input provided"}
+        raise HTTPException(400, "No input provided")
 
     content = content[:1000]
 
-    result = summarizer(
-        "summarize: " + content,
-        max_length=100,
-        do_sample=False
-    )
+    result = summarizer("summarize: " + content, max_length=100, do_sample=False)
 
     return {
         "summary": result[0]["generated_text"],
