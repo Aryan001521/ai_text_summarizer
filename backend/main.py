@@ -9,14 +9,13 @@ import os
 
 app = FastAPI()
 
-# 🔥 DEBUG CHECK
-print("MAIN APP LOADED 🚀")
-print("AUTH ROUTER LOADED 🚀")
+# ================= AUTH ROUTER =================
+# IMPORTANT: prefix MUST match frontend "/auth/login"
+app.include_router(auth_router, prefix="/auth", tags=["Auth"])
 
-# ---------------- AUTH ROUTES ----------------
-app.include_router(auth_router, prefix="/auth")
+print("✅ AUTH ROUTER LOADED")
 
-# ---------------- CORS ----------------
+# ================= CORS =================
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -28,14 +27,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------------- STATIC ----------------
+# ================= STATIC SAFE =================
 if os.path.exists("static"):
     app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# ---------------- MODEL ----------------
+# ================= MODEL =================
 summarizer = pipeline("text-generation", model="distilgpt2")
 
-# ---------------- KEYWORDS ----------------
+# ================= KEYWORDS =================
 def extract_keywords(text):
     words = text.split()
     words = [w.strip(".,!?").lower() for w in words]
@@ -50,12 +49,12 @@ def extract_keywords(text):
 
     return keywords[:10]
 
-# ---------------- HOME ----------------
+# ================= HOME =================
 @app.get("/")
 def home():
     return {"message": "AI Text Summarizer API Running 🚀"}
 
-# ---------------- SUMMARIZE ----------------
+# ================= SUMMARIZE =================
 @app.post("/summarize")
 async def summarize(
     text: str = Form(None),
@@ -78,11 +77,15 @@ async def summarize(
                 content += page_text
 
     if not content.strip():
-        raise HTTPException(400, "No input provided")
+        raise HTTPException(status_code=400, detail="No input provided")
 
     content = content[:1000]
 
-    result = summarizer("summarize: " + content, max_length=100, do_sample=False)
+    result = summarizer(
+        "summarize: " + content,
+        max_length=100,
+        do_sample=False
+    )
 
     return {
         "summary": result[0]["generated_text"],
