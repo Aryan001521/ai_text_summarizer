@@ -9,41 +9,35 @@ import os
 
 app = FastAPI()
 
-# Auth router (public endpoints: /login, /signup)
-app.include_router(auth_router)
+# ---------------- AUTH ROUTES ----------------
+# IMPORTANT: /auth prefix use karo
+app.include_router(auth_router, prefix="/auth")
 
-# CORS fix
+# ---------------- CORS FIX ----------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "https://ai-text-summarizer-pi-ten.vercel.app"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# SAFE STATIC HANDLING
-# (Railway crash avoid: folder check)
+# ---------------- STATIC SAFE ----------------
 if os.path.exists("static"):
     app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# ---------------- MODEL ----------------
+summarizer = pipeline("text-generation", model="distilgpt2")
 
-# MODEL (LIGHTER SAFE OPTION)
-# NOTE: Railway 1GB RAM limit → heavy models crash
-summarizer = pipeline(
-    "text-generation",
-    model="distilgpt2"
-)
-
-
-# KEYWORDS
+# ---------------- KEYWORDS ----------------
 def extract_keywords(text):
     words = text.split()
     words = [w.strip(".,!?").lower() for w in words]
 
-    stop_words = [
-        "the", "is", "and", "a", "an", "of", "to",
-        "in", "for", "on", "with"
-    ]
+    stop_words = ["the","is","and","a","an","of","to","in","for","on","with"]
 
     keywords = []
     for w in words:
@@ -53,14 +47,12 @@ def extract_keywords(text):
 
     return keywords[:10]
 
-
-# HOME
+# ---------------- HOME ----------------
 @app.get("/")
 def home():
     return {"message": "AI Text Summarizer API Running 🚀"}
 
-
-# SUMMARIZE (PROTECTED - AUTH REQUIRED)
+# ---------------- SUMMARIZE ----------------
 @app.post("/summarize")
 async def summarize(
     text: str = Form(None),
@@ -70,11 +62,9 @@ async def summarize(
 
     content = ""
 
-    # TEXT INPUT
     if text:
         content = text
 
-    # PDF INPUT
     elif file:
         pdf_bytes = await file.read()
         pdf_reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
@@ -84,33 +74,15 @@ async def summarize(
             if page_text:
                 content += page_text
 
-    # ERROR HANDLING
     if not content.strip():
-        raise HTTPException(
-            status_code=400,
-            detail="Please provide text or PDF file"
-        )
+        raise HTTPException(400, "No input provided")
 
-    # LIMIT (important for Railway memory)
     content = content[:1000]
 
-    # SAFE PROMPT
-    prompt = "summarize: " + content
-
-    try:
-        result = summarizer(prompt, max_length=100, do_sample=False)
-        summary = result[0]["generated_text"]
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Summarization failed: {str(e)}"
-        )
-
-    keywords = extract_keywords(content)
+    result = summarizer("summarize: " + content, max_length=100, do_sample=False)
 
     return {
-        "summary": summary,
-        "keywords": keywords,
+        "summary": result[0]["generated_text"],
+        "keywords": extract_keywords(content),
         "user": user
     }
