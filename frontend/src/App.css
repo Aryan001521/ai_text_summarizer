@@ -1,0 +1,142 @@
+body {
+  margin: 0;
+  padding: 0;
+  font-family: "Segoe UI", sans-serif;
+
+  background: #0b1220;
+  min-height: 100vh;
+  color: white;
+}
+
+/* MAIN WRAPPER */
+.app {
+  width: 100%;
+  min-height: 100vh;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  padding: 40px 16px;
+}
+
+/* HEADER */
+h1 {
+  font-size: 34px;
+  margin-bottom: 6px;
+  font-weight: 700;
+
+  color: #ffffff;
+}
+
+/* SUBTITLE */
+.subtitle {
+  color: rgba(255,255,255,0.6);
+  margin-bottom: 25px;
+  font-size: 14px;
+}
+
+/* CARD */
+.card {
+  width: 100%;
+  max-width: 800px;
+
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+
+  padding: 20px;
+
+  backdrop-filter: blur(10px);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+}
+
+/* TEXTAREA */
+textarea {
+  width: 100%;
+  min-height: 220px;
+
+  padding: 16px;
+  border-radius: 12px;
+
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(0,0,0,0.2);
+
+  color: white;
+  font-size: 15px;
+
+  outline: none;
+  resize: none;
+
+  transition: 0.2s ease;
+}
+
+textarea:focus {
+  border: 1px solid #4f9cff;
+}
+
+/* UPLOAD BOX */
+.upload-box {
+  margin-top: 15px;
+
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  padding: 14px;
+
+  border-radius: 12px;
+  background: rgba(255,255,255,0.03);
+  border: 1px dashed rgba(255,255,255,0.15);
+}
+
+/* FILE INPUT */
+.upload-box input {
+  color: white;
+}
+
+/* BUTTON */
+button {
+  width: 100%;
+  margin-top: 15px;
+  padding: 14px;
+
+  border: none;
+  border-radius: 12px;
+
+  font-size: 16px;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  background: linear-gradient(90deg, #4f9cff, #7c3aed);
+  color: white;
+
+  transition: 0.2s ease;
+}
+
+button:hover {
+  transform: translateY(-2px);
+}
+
+/* RESULT BOX */
+.result-box {
+  margin-top: 20px;
+  padding: 18px;
+
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+
+  white-space: pre-wrap;
+}
+
+/* OPTIONAL: remove heavy scroll look */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.15);
+  border-radius: 10px;
+}
