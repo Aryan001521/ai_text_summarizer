@@ -1,13 +1,20 @@
 from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from transformers import pipeline
-from auth import router as auth_router, get_current_user
+from auth import router as auth_router, get_current_user, init_db
 import PyPDF2
 import io
 import os
 import uvicorn
 
 app = FastAPI()
+
+
+# ---------------- STARTUP ----------------
+@app.on_event("startup")
+def on_startup():
+    init_db()
+
 
 # ---------------- AUTH ----------------
 app.include_router(auth_router)
