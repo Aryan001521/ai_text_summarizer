@@ -1,8 +1,8 @@
-
 fastapi
 uvicorn
 transformers==4.41.1
 torch==2.5.1
+python-jose[cryptography]
 python-multipart
 pymupdf
 sqlalchemy==2.0.36
