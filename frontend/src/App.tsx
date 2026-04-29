@@ -11,7 +11,7 @@ import {
 import AdminDashboard from "./Pages/AdminDashboard";
 import "./App.css";
 
-// 🔥 IMPORTANT: PRODUCTION BACKEND URL
+// 🔥 BACKEND URL
 const API_BASE_URL =
   "https://aitextsummarizer-production.up.railway.app";
 
@@ -47,7 +47,7 @@ function MainApp() {
   const handleLogin = async () => {
     try {
       const res = await axios.post(
-        `${API_BASE_URL}/login`,
+        `${API_BASE_URL}/auth/login`,
         {
           email,
           password,
@@ -69,7 +69,7 @@ function MainApp() {
   // ---------------- SIGNUP ----------------
   const handleSignup = async () => {
     try {
-      await axios.post(`${API_BASE_URL}/signup`, {
+      await axios.post(`${API_BASE_URL}/auth/signup`, {
         username,
         email,
         password,
